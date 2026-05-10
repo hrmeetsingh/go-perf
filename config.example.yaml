@@ -1,0 +1,58 @@
+# go-perf configuration example
+# Copy this file to go-perf.yaml and adjust values.
+
+target: "localhost:50051"
+proto: "path/to/service.proto"        # single file or directory
+call: "mypackage.MyService/DoWork"    # fully qualified method
+
+# Benchmark parameters
+concurrency: 50
+total: 1000
+duration: "30s"                       # alternative to total
+connections: 5
+timeout: "10s"
+
+# Custom metadata sent with each request
+metadata:
+  x-request-id: "bench-run"
+
+# Authentication
+auth:
+  type: "static"                      # "static" or "oauth"
+  token: "your-jwt-token-here"
+
+  # OAuth2/OIDC (used when type: oauth)
+  # token_url: "https://auth.example.com/oauth/token"
+  # client_id: "my-client-id"
+  # client_secret: "my-client-secret"
+
+# Dynamic payload fields — these fields are randomized per request
+dynamic_fields:
+  - field: "user_id"
+    type: "uuid"
+
+  - field: "amount"
+    type: "int_range"
+    min: 1
+    max: 10000
+
+  - field: "status"
+    type: "pool"
+    values: ["active", "inactive", "pending"]
+
+  - field: "name"
+    type: "string"
+    length: 12
+
+  - field: "created_at"
+    type: "timestamp"
+
+# Output configuration
+output:
+  formats: ["cli", "html", "json", "junit"]
+  dir: "./reports"
+
+# Bidirectional streaming configuration
+stream:
+  send_rate: 100                      # messages per second per stream
+  stream_count: 5                     # number of concurrent streams
