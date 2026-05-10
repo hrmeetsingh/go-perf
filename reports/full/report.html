@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>gRPC Benchmark Report</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --border: #334155;
+            --text: #e2e8f0;
+            --muted: #94a3b8;
+            --accent: #38bdf8;
+            --success: #4ade80;
+            --danger: #f87171;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--accent);
+        }
+        h2 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin: 2rem 0 1rem;
+            color: var(--text);
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.5rem;
+        }
+        .meta {
+            color: var(--muted);
+            font-size: 0.9rem;
+            margin-bottom: 2rem;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.2rem;
+        }
+        .card .label {
+            font-size: 0.8rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .card .value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-top: 0.25rem;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--surface);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            background: var(--bg);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            color: var(--muted);
+            letter-spacing: 0.05em;
+        }
+        tr:last-child td { border-bottom: none; }
+        .success { color: var(--success); }
+        .danger { color: var(--danger); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>gRPC Benchmark Report</h1>
+        <div class="meta">
+            <span>localhost:50051</span> &middot;
+            <span>bench.BenchService/ProcessOrder</span> &middot;
+            <span>2026-05-10 15:44:07.394349 -0600 MDT m=&#43;4.364487542</span>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <div class="label">Total Requests</div>
+                <div class="value">2000</div>
+            </div>
+            <div class="card">
+                <div class="label">Errors</div>
+                <div class="value success">0</div>
+            </div>
+            <div class="card">
+                <div class="label">RPS</div>
+                <div class="value">459.34</div>
+            </div>
+            <div class="card">
+                <div class="label">Duration</div>
+                <div class="value">4.354086292s</div>
+            </div>
+            <div class="card">
+                <div class="label">Concurrency</div>
+                <div class="value">20</div>
+            </div>
+        </div>
+
+        <h2>Latency Distribution</h2>
+        <div class="grid">
+            <div class="card">
+                <div class="label">Min</div>
+                <div class="value">20.097333ms</div>
+            </div>
+            <div class="card">
+                <div class="label">Avg</div>
+                <div class="value">41.803376ms</div>
+            </div>
+            <div class="card">
+                <div class="label">P50</div>
+                <div class="value">21.0395ms</div>
+            </div>
+            <div class="card">
+                <div class="label">P95</div>
+                <div class="value">200.863125ms</div>
+            </div>
+            <div class="card">
+                <div class="label">P99</div>
+                <div class="value">201.670167ms</div>
+            </div>
+            <div class="card">
+                <div class="label">Max</div>
+                <div class="value">203.726916ms</div>
+            </div>
+        </div>
+
+        
+        <h2>Status Codes</h2>
+        <table>
+            <tr><th>Code</th><th>Count</th></tr>
+            
+            <tr>
+                <td>OK</td>
+                <td>2000</td>
+            </tr>
+            
+        </table>
+        
+
+        
+        <h2>Payload Variant Breakdown</h2>
+        <table>
+            <tr>
+                <th>Hash</th>
+                <th>Count</th>
+                <th>Avg Latency</th>
+                <th>P99 Latency</th>
+                <th>Max Latency</th>
+            </tr>
+            
+            <tr>
+                <td><code>dynamic</code></td>
+                <td>2000</td>
+                <td>41.803376ms</td>
+                <td>201.670167ms</td>
+                <td>203.726916ms</td>
+            </tr>
+            
+        </table>
+        
+    </div>
+</body>
+</html>

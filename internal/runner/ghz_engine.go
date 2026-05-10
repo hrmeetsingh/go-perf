@@ -2,7 +2,6 @@ package runner
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -17,14 +16,16 @@ func NewGhzEngine() *GhzEngine {
 }
 
 func (e *GhzEngine) Run(ctx context.Context, call, target string, cfg RunConfig, variant VariantConfig, authMeta map[string]string) (*Result, error) {
-	payloadJSON, err := json.Marshal(variant.Payload)
-	if err != nil {
-		return nil, fmt.Errorf("marshaling payload: %w", err)
+	// Pass the map directly — ghz marshals it internally.
+	// Passing pre-marshaled []byte would cause ghz to base64-encode it again.
+	data := variant.Payload
+	if data == nil {
+		data = map[string]interface{}{}
 	}
 
 	opts := []runner.Option{
 		runner.WithProtoFile(cfg.ProtoPath, []string{}),
-		runner.WithData(payloadJSON),
+		runner.WithData(data),
 		runner.WithInsecure(cfg.Insecure),
 	}
 

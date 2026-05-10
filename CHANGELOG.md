@@ -186,3 +186,76 @@ All 7 refactorings applied cleanly. The Engine interface decouples orchestrator 
 
 ### Test status
 - 68 tests passing / 68 total
+
+## v9 - Diagram (examples) - 2026-05-10T15:27
+
+### What changed
+- Presented architecture diagram for examples/ + Makefile
+- Confirmed by user
+
+### Files touched
+- `CHANGELOG.md`
+
+### Test status
+- 68 tests passing / 68 total
+
+## v10 - Tests First (examples) - 2026-05-10T15:30
+
+### What changed
+- Created 16 failing tests for example package
+- Tests cover: perf_sim helpers (9), config file parsing (5), Makefile targets (2), file existence (5)
+
+### Files touched
+- `examples/perf_sim_test.go` — 9 tests: TierMultiplier, PayloadLatency, SpikeLatency, SimulateLatency
+- `examples/configs_test.go` — 5 tests: all 4 configs parse; proto path exists
+- `examples/makefile_test.go` — 7 tests: required targets, help, proto, generated files, server
+
+### Test status
+- 16 tests failing (undefined: TierMultiplier, PayloadLatency, SpikeLatency, SimulateLatency)
+
+## v11 - Minimal Implementation (examples) - 2026-05-10T15:35
+
+### What changed
+- Implemented sample gRPC service with 4 RPCs and 3 performance patterns
+- Generated Go proto bindings using protoc
+- Created 4 benchmark config files
+- Created Makefile with 9 targets + help
+
+### Files touched
+- `examples/bench.proto` — 4 RPCs: FastEcho, ProcessOrder, StreamEvents, BidirectionalChat
+- `examples/gen/bench/bench.pb.go` — generated proto messages
+- `examples/gen/bench/bench_grpc.pb.go` — generated gRPC service interfaces
+- `examples/perf_sim.go` — TierMultiplier, PayloadLatency, SpikeLatency, SimulateLatency, Sleep
+- `examples/server/main.go` — gRPC server with all 4 RPCs, performance simulation wired in
+- `examples/configs/quick.yaml` — 200-req unary, CLI output
+- `examples/configs/full.yaml` — 2000-req unary, all formats, dynamic tier+order_id+amount
+- `examples/configs/dynamic.yaml` — 600-req unary, dynamic tier+message, per-tier drill-down
+- `examples/configs/stream.yaml` — bidi streaming 30s, 5 streams
+- `Makefile` — build, test, clean, proto, server, bench-quick/full/dynamic/compare/stream, generate-payload, help
+- `README.md` — Example section with service table, step-by-step guide, Makefile reference, sample report output
+
+### Test status
+- 84 tests passing / 84 total (68 internal + 16 examples)
+
+### Summary
+The sample BenchService exposes 4 RPCs wired to a shared perf_sim package. TierMultiplier applies a 1×/2×/5× latency factor for premium/standard/free users. SpikeLatency randomly inflates 1-in-N requests by a configurable multiplier to produce realistic spike distributions visible in drill-down reports. PayloadLatency scales with request byte size. The Makefile provides one-command workflows from server start through report generation and comparison. All existing tests remain green.
+
+## v8 - Clarify (examples) - 2026-05-10T15:22
+
+### What changed
+- Gathered requirements for example gRPC service and Makefile
+
+### Requirements
+| Area | Decision |
+|------|----------|
+| RPC methods | 4: unary-fast, unary-slow, server-stream, bidi-stream |
+| Performance patterns | payload-driven latency, random spikes, user-tier simulation |
+| Location | `examples/` directory at repo root |
+| Makefile targets | build, test, server, bench-quick, bench-full, bench-dynamic, bench-compare, generate-payload, clean |
+| Server port | 50051 |
+
+### Files touched
+- `CHANGELOG.md`
+
+### Test status
+- 68 tests passing / 68 total

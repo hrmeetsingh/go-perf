@@ -140,6 +140,30 @@ func percentileFromSorted(sorted []time.Duration, pct float64) time.Duration {
 	return sorted[idx]
 }
 
+// GroupLatencyStats computes LatencyStats for a slice of records (e.g. one payload group).
+func GroupLatencyStats(records []LatencyRecord) LatencyStats {
+	if len(records) == 0 {
+		return LatencyStats{}
+	}
+	durations := make([]time.Duration, len(records))
+	var total time.Duration
+	for i, r := range records {
+		durations[i] = r.Duration
+		total += r.Duration
+	}
+	sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
+	n := len(durations)
+	return LatencyStats{
+		Min:     durations[0],
+		Max:     durations[n-1],
+		Average: total / time.Duration(n),
+		P50:     percentileFromSorted(durations, 0.50),
+		P95:     percentileFromSorted(durations, 0.95),
+		P99:     percentileFromSorted(durations, 0.99),
+		Count:   n,
+	}
+}
+
 func (r *Result) LatencyByPayloadHash() map[string][]LatencyRecord {
 	groups := make(map[string][]LatencyRecord)
 	for _, l := range r.Latencies {
@@ -158,10 +182,22 @@ func (r *Result) StatusCodeCounts() map[string]int {
 
 func (mvr *MultiVariantResult) Merge() *Result {
 	merged := &Result{}
+	var totalRPS float64
 	for _, r := range mvr.Results {
 		merged.TotalCount += r.TotalCount
 		merged.ErrorCount += r.ErrorCount
 		merged.Latencies = append(merged.Latencies, r.Latencies...)
+		if r.Duration > merged.Duration {
+			merged.Duration = r.Duration
+		}
+		totalRPS += r.RPS
+		if merged.StartTime.IsZero() || r.StartTime.Before(merged.StartTime) {
+			merged.StartTime = r.StartTime
+		}
+		if r.EndTime.After(merged.EndTime) {
+			merged.EndTime = r.EndTime
+		}
 	}
+	merged.RPS = totalRPS
 	return merged
 }

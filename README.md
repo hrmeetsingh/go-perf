@@ -236,6 +236,129 @@ go-perf/
       .go-perf/benchmarks/latest.json
 ```
 
+## Example: Sample gRPC Service
+
+The `examples/` directory contains a self-contained gRPC service designed to demonstrate every feature of go-perf. It simulates realistic, varied performance so benchmark reports are visually interesting.
+
+### What the example service does
+
+**Proto file:** `examples/bench.proto`
+
+| RPC | Type | Base latency | Performance pattern |
+|-----|------|-------------|---------------------|
+| `FastEcho` | Unary | ~2ms | 1-in-10 requests spike to 20ms |
+| `ProcessOrder` | Unary | 5ms + 1ms/100B payload | Payload size + user tier driven; 1-in-10 spikes |
+| `StreamEvents` | Server-stream | ~10ms/message | 1-in-5 messages delayed to 50ms |
+| `BidirectionalChat` | Bidi-stream | ~3ms/message | User-tier multiplied; 1-in-8 spike to 30ms |
+
+**User tiers** — pass `user_tier` field as `premium`, `standard`, or `free`:
+
+| Tier | Latency multiplier |
+|------|--------------------|
+| premium | 1× (fastest) |
+| standard | 2× |
+| free | 5× (slowest) |
+
+### Running the full example
+
+**Step 1 — Build and start the server** (terminal 1):
+
+```bash
+make server
+# or
+go run examples/server/main.go
+```
+
+Output:
+```
+BenchService listening on :50051
+  FastEcho       — unary,  ~2ms base, 1-in-10 spikes
+  ProcessOrder   — unary,  payload-size + tier driven
+  StreamEvents   — server-stream, ~10ms/message
+  BidirectionalChat — bidi, ~3ms/message, tier driven
+```
+
+**Step 2 — Run benchmarks** (terminal 2):
+
+```bash
+# Quick sanity check — 200 requests, CLI output
+make bench-quick
+
+# Full benchmark with all output formats (HTML, JSON, JUnit)
+make bench-full
+# → reports at ./reports/full/report.html
+
+# Dynamic payload benchmark (3 user tiers in parallel)
+make bench-dynamic
+# → drill-down report shows per-tier latency at ./reports/dynamic/report.html
+
+# Two sequential runs then a comparison
+make bench-compare
+
+# Bidirectional streaming — 30 seconds
+make bench-stream
+```
+
+**Generate a sample payload from proto:**
+
+```bash
+make generate-payload
+```
+
+Output:
+```json
+{
+  "order_id": "sample_order_id",
+  "amount": 0,
+  "user_tier": "sample_user_tier",
+  "payload": ""
+}
+```
+
+### Makefile reference
+
+```
+make help            Show all available targets
+make build           Compile go-perf binary
+make test            Run all tests (84 total)
+make server          Start sample gRPC server on :50051
+make bench-quick     200-request unary benchmark, CLI output
+make bench-full      2000-request benchmark, all formats
+make bench-dynamic   Dynamic payload benchmark, per-tier drill-down
+make bench-compare   Two runs followed by comparison diff
+make bench-stream    30s bidirectional streaming benchmark
+make generate-payload  Extract sample payload from bench.proto
+make proto           Regenerate Go code from bench.proto (needs protoc)
+make clean           Remove binary, reports, benchmarks
+```
+
+### Example benchmark report output
+
+After `make bench-dynamic`, the CLI table shows per-payload-hash latency breakdown:
+
+```
+============================================================
+  gRPC Benchmark Report
+============================================================
+
+  Target:       localhost:50051
+  Call:         bench.BenchService/FastEcho
+  Total:        600    Errors: 0    RPS: 142.30
+
+  Latency:
+    Min:    1.8ms    Avg: 4.1ms    P50: 2.3ms
+    P95:   18.4ms    P99: 21.7ms   Max: 22.1ms
+
+  Payload Variant Breakdown:
+  Hash             Count    Avg          P99          Max
+  ------------------------------------------------------------
+  a1b2c3d4e5f6     189      2.1ms        4.8ms        5.2ms   ← premium
+  f6e5d4c3b2a1     201      4.3ms        9.1ms        9.8ms   ← standard
+  c3d4e5f6a1b2     210     10.8ms       21.7ms       22.1ms   ← free
+```
+
+The payload hash groups map back to the dynamic `user_tier` pool values, letting you instantly see which tier caused the P99 spike.
+
 ## License
 
 MIT

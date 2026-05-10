@@ -1,0 +1,23 @@
+# Dynamic payload benchmark — demonstrates multi-variant parallel execution.
+# Three user tiers run simultaneously, so the report shows per-tier latency
+# breakdown. Use the payload-hash drill-down to see which tier causes spikes.
+target: "localhost:50051"
+proto: "examples/bench.proto"
+call: "bench.BenchService/FastEcho"
+
+concurrency: 15
+total: 600
+timeout: "5s"
+
+dynamic_fields:
+  - field: "user_tier"
+    type: "pool"
+    values: ["premium", "standard", "free"]
+
+  - field: "message"
+    type: "string"
+    length: 24
+
+output:
+  formats: ["cli", "html", "json"]
+  dir: "./reports/dynamic"

@@ -258,21 +258,13 @@ func buildBenchmarkData(cfg *config.Config, result *runner.Result, stats runner.
 
 	groups := result.LatencyByPayloadHash()
 	for hash, records := range groups {
-		var total time.Duration
-		var maxLat time.Duration
-		for _, r := range records {
-			total += r.Duration
-			if r.Duration > maxLat {
-				maxLat = r.Duration
-			}
-		}
-		avg := total / time.Duration(len(records))
-
+		gs := runner.GroupLatencyStats(records)
 		data.PayloadGroups = append(data.PayloadGroups, report.PayloadGroupData{
 			PayloadHash: hash,
-			Count:       len(records),
-			AvgLatency:  avg,
-			MaxLatency:  maxLat,
+			Count:       gs.Count,
+			AvgLatency:  gs.Average,
+			MaxLatency:  gs.Max,
+			P99Latency:  gs.P99,
 		})
 	}
 

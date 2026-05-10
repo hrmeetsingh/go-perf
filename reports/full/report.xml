@@ -1,0 +1,8 @@
+<testsuites>
+  <testsuite name="bench.BenchService/ProcessOrder" tests="2000" failures="0" time="4.354">
+    <testcase name="latency_avg" time="0.041803"></testcase>
+    <testcase name="latency_p99" time="0.201670"></testcase>
+    <testcase name="throughput_rps_459.34" time="4.354"></testcase>
+    <testcase name="payload_dynamic_avg_latency" time="0.041803"></testcase>
+  </testsuite>
+</testsuites>

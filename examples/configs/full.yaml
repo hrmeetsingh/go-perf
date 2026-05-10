@@ -1,0 +1,29 @@
+# Full benchmark — 2000 requests, all output formats.
+# Uses ProcessOrder to demonstrate payload-driven latency.
+# Dynamic fields generate varied payloads so the drill-down report shows
+# how different user tiers and amounts correlate with observed latency.
+target: "localhost:50051"
+proto: "examples/bench.proto"
+call: "bench.BenchService/ProcessOrder"
+
+concurrency: 20
+total: 2000
+timeout: "10s"
+connections: 2
+
+dynamic_fields:
+  - field: "user_tier"
+    type: "pool"
+    values: ["premium", "standard", "free"]
+
+  - field: "order_id"
+    type: "uuid"
+
+  - field: "amount"
+    type: "int_range"
+    min: 1
+    max: 5000
+
+output:
+  formats: ["cli", "html", "json", "junit"]
+  dir: "./reports/full"

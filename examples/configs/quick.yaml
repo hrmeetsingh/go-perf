@@ -1,0 +1,13 @@
+# Quick benchmark — 200 unary requests, CLI output only.
+# Demonstrates base performance of FastEcho with default (standard) tier.
+target: "localhost:50051"
+proto: "examples/bench.proto"
+call: "bench.BenchService/FastEcho"
+
+concurrency: 10
+total: 200
+timeout: "5s"
+
+output:
+  formats: ["cli"]
+  dir: "./reports/quick"
