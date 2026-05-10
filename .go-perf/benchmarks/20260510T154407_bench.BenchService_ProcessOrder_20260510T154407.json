@@ -1,0 +1,17 @@
+{
+  "id": "bench.BenchService/ProcessOrder_20260510T154407",
+  "timestamp": "2026-05-10T15:44:07.400847-06:00",
+  "target": "localhost:50051",
+  "call": "bench.BenchService/ProcessOrder",
+  "total_count": 2000,
+  "error_count": 0,
+  "duration": 4354086292,
+  "concurrency": 20,
+  "avg_latency": 41803376,
+  "min_latency": 20097333,
+  "max_latency": 203726916,
+  "p50_latency": 21039500,
+  "p95_latency": 200863125,
+  "p99_latency": 201670167,
+  "rps": 459.33862258878725
+}

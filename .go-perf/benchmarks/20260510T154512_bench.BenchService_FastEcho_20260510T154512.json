@@ -1,0 +1,17 @@
+{
+  "id": "bench.BenchService/FastEcho_20260510T154512",
+  "timestamp": "2026-05-10T15:45:12.021102-06:00",
+  "target": "localhost:50051",
+  "call": "bench.BenchService/FastEcho",
+  "total_count": 600,
+  "error_count": 0,
+  "duration": 189341250,
+  "concurrency": 15,
+  "avg_latency": 4286842,
+  "min_latency": 2114250,
+  "max_latency": 23225625,
+  "p50_latency": 2405375,
+  "p95_latency": 20336083,
+  "p99_latency": 20538000,
+  "rps": 3168.8815828563506
+}
