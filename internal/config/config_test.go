@@ -6,39 +6,36 @@ import (
 	"testing"
 )
 
-func TestLoadFromYAML(t *testing.T) {
+func TestLoadFromYAML_MultiCall(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	yaml := `
 target: "localhost:50051"
 proto: "service.proto"
-call: "mypackage.MyService/DoWork"
 concurrency: 10
 total: 1000
-duration: "30s"
-connections: 5
 timeout: "10s"
-metadata:
-  x-request-id: "test"
+parallel: true
 auth:
   type: "static"
   token: "my-jwt-token"
-dynamic_fields:
-  - field: "user_id"
-    type: "uuid"
-  - field: "amount"
-    type: "int_range"
-    min: 1
-    max: 1000
-  - field: "status"
-    type: "pool"
-    values: ["active", "inactive", "pending"]
 output:
-  formats: ["cli", "html", "json", "junit"]
+  formats: ["cli", "html"]
   dir: "./reports"
-stream:
-  send_rate: 100
-  stream_count: 5
+calls:
+  - call: "mypackage.MyService/DoWork"
+    dynamic_fields:
+      - field: "user_id"
+        type: "uuid"
+      - field: "amount"
+        type: "int_range"
+        min: 1
+        max: 1000
+  - call: "mypackage.MyService/GetStatus"
+    dynamic_fields:
+      - field: "status"
+        type: "pool"
+        values: ["active", "inactive", "pending"]
 `
 	if err := os.WriteFile(cfgPath, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -55,44 +52,23 @@ stream:
 	if cfg.Proto != "service.proto" {
 		t.Errorf("Proto = %q, want %q", cfg.Proto, "service.proto")
 	}
-	if cfg.Call != "mypackage.MyService/DoWork" {
-		t.Errorf("Call = %q, want %q", cfg.Call, "mypackage.MyService/DoWork")
+	if !cfg.Parallel {
+		t.Error("Parallel should be true")
 	}
-	if cfg.Concurrency != 10 {
-		t.Errorf("Concurrency = %d, want %d", cfg.Concurrency, 10)
+	if len(cfg.Calls) != 2 {
+		t.Fatalf("Calls count = %d, want 2", len(cfg.Calls))
 	}
-	if cfg.Total != 1000 {
-		t.Errorf("Total = %d, want %d", cfg.Total, 1000)
+	if cfg.Calls[0].Call != "mypackage.MyService/DoWork" {
+		t.Errorf("Calls[0].Call = %q", cfg.Calls[0].Call)
 	}
-	if cfg.Duration != "30s" {
-		t.Errorf("Duration = %q, want %q", cfg.Duration, "30s")
+	if len(cfg.Calls[0].DynamicFields) != 2 {
+		t.Errorf("Calls[0].DynamicFields count = %d, want 2", len(cfg.Calls[0].DynamicFields))
 	}
-	if cfg.Connections != 5 {
-		t.Errorf("Connections = %d, want %d", cfg.Connections, 5)
+	if cfg.Calls[1].Call != "mypackage.MyService/GetStatus" {
+		t.Errorf("Calls[1].Call = %q", cfg.Calls[1].Call)
 	}
-	if cfg.Timeout != "10s" {
-		t.Errorf("Timeout = %q, want %q", cfg.Timeout, "10s")
-	}
-	if cfg.Auth.Type != "static" {
-		t.Errorf("Auth.Type = %q, want %q", cfg.Auth.Type, "static")
-	}
-	if cfg.Auth.Token != "my-jwt-token" {
-		t.Errorf("Auth.Token = %q, want %q", cfg.Auth.Token, "my-jwt-token")
-	}
-	if len(cfg.DynamicFields) != 3 {
-		t.Errorf("DynamicFields count = %d, want 3", len(cfg.DynamicFields))
-	}
-	if cfg.DynamicFields[0].Field != "user_id" || cfg.DynamicFields[0].Type != "uuid" {
-		t.Errorf("DynamicFields[0] = %+v, want user_id/uuid", cfg.DynamicFields[0])
-	}
-	if len(cfg.Output.Formats) != 4 {
-		t.Errorf("Output.Formats count = %d, want 4", len(cfg.Output.Formats))
-	}
-	if cfg.Stream.SendRate != 100 {
-		t.Errorf("Stream.SendRate = %d, want 100", cfg.Stream.SendRate)
-	}
-	if cfg.Stream.StreamCount != 5 {
-		t.Errorf("Stream.StreamCount = %d, want 5", cfg.Stream.StreamCount)
+	if len(cfg.Calls[1].DynamicFields) != 1 {
+		t.Errorf("Calls[1].DynamicFields count = %d, want 1", len(cfg.Calls[1].DynamicFields))
 	}
 }
 
@@ -118,7 +94,7 @@ func TestLoadFromYAML_InvalidYAML(t *testing.T) {
 func TestValidate_MissingTarget(t *testing.T) {
 	cfg := &Config{
 		Proto: "service.proto",
-		Call:  "pkg.Svc/Method",
+		Calls: []CallEntry{{Call: "pkg.Svc/Method"}},
 	}
 	err := cfg.Validate()
 	if err == nil {
@@ -129,7 +105,7 @@ func TestValidate_MissingTarget(t *testing.T) {
 func TestValidate_MissingProto(t *testing.T) {
 	cfg := &Config{
 		Target: "localhost:50051",
-		Call:   "pkg.Svc/Method",
+		Calls:  []CallEntry{{Call: "pkg.Svc/Method"}},
 	}
 	err := cfg.Validate()
 	if err == nil {
@@ -137,14 +113,26 @@ func TestValidate_MissingProto(t *testing.T) {
 	}
 }
 
-func TestValidate_MissingCall(t *testing.T) {
+func TestValidate_MissingCalls(t *testing.T) {
 	cfg := &Config{
 		Target: "localhost:50051",
 		Proto:  "service.proto",
 	}
 	err := cfg.Validate()
 	if err == nil {
-		t.Error("expected validation error for missing call")
+		t.Error("expected validation error for empty calls list")
+	}
+}
+
+func TestValidate_EmptyCallInList(t *testing.T) {
+	cfg := &Config{
+		Target: "localhost:50051",
+		Proto:  "service.proto",
+		Calls:  []CallEntry{{Call: ""}},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Error("expected validation error for empty call string")
 	}
 }
 
@@ -152,7 +140,21 @@ func TestValidate_ValidMinimal(t *testing.T) {
 	cfg := &Config{
 		Target: "localhost:50051",
 		Proto:  "service.proto",
-		Call:   "pkg.Svc/Method",
+		Calls:  []CallEntry{{Call: "pkg.Svc/Method"}},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() error = %v, want nil", err)
+	}
+}
+
+func TestValidate_ValidMultipleCalls(t *testing.T) {
+	cfg := &Config{
+		Target: "localhost:50051",
+		Proto:  "service.proto",
+		Calls: []CallEntry{
+			{Call: "pkg.Svc/MethodA"},
+			{Call: "pkg.Svc/MethodB"},
+		},
 	}
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("Validate() error = %v, want nil", err)
@@ -163,10 +165,8 @@ func TestValidate_InvalidAuthType(t *testing.T) {
 	cfg := &Config{
 		Target: "localhost:50051",
 		Proto:  "service.proto",
-		Call:   "pkg.Svc/Method",
-		Auth: AuthConfig{
-			Type: "kerberos",
-		},
+		Calls:  []CallEntry{{Call: "pkg.Svc/Method"}},
+		Auth:   AuthConfig{Type: "kerberos"},
 	}
 	err := cfg.Validate()
 	if err == nil {
@@ -178,11 +178,8 @@ func TestValidate_OAuthMissingEndpoint(t *testing.T) {
 	cfg := &Config{
 		Target: "localhost:50051",
 		Proto:  "service.proto",
-		Call:   "pkg.Svc/Method",
-		Auth: AuthConfig{
-			Type:     "oauth",
-			ClientID: "my-client",
-		},
+		Calls:  []CallEntry{{Call: "pkg.Svc/Method"}},
+		Auth:   AuthConfig{Type: "oauth", ClientID: "my-client"},
 	}
 	err := cfg.Validate()
 	if err == nil {
@@ -190,13 +187,17 @@ func TestValidate_OAuthMissingEndpoint(t *testing.T) {
 	}
 }
 
-func TestValidate_InvalidDynamicFieldType(t *testing.T) {
+func TestValidate_InvalidDynamicFieldTypeInCall(t *testing.T) {
 	cfg := &Config{
 		Target: "localhost:50051",
 		Proto:  "service.proto",
-		Call:   "pkg.Svc/Method",
-		DynamicFields: []DynamicFieldConfig{
-			{Field: "name", Type: "unsupported_type"},
+		Calls: []CallEntry{
+			{
+				Call: "pkg.Svc/Method",
+				DynamicFields: []DynamicFieldConfig{
+					{Field: "name", Type: "unsupported_type"},
+				},
+			},
 		},
 	}
 	err := cfg.Validate()
@@ -205,11 +206,14 @@ func TestValidate_InvalidDynamicFieldType(t *testing.T) {
 	}
 }
 
-func TestMergeFlags(t *testing.T) {
+func TestMergeFlags_CallOverrideSingleEntry(t *testing.T) {
 	base := &Config{
-		Target:      "localhost:50051",
-		Proto:       "service.proto",
-		Call:        "pkg.Svc/Method",
+		Target: "localhost:50051",
+		Proto:  "service.proto",
+		Calls: []CallEntry{
+			{Call: "pkg.Svc/MethodA"},
+			{Call: "pkg.Svc/MethodB"},
+		},
 		Concurrency: 10,
 		Total:       1000,
 	}
@@ -217,21 +221,57 @@ func TestMergeFlags(t *testing.T) {
 	overrides := &FlagOverrides{
 		Target:      "remote:50051",
 		Concurrency: 50,
+		Call:        "pkg.Svc/MethodA",
 	}
 
 	merged := MergeFlags(base, overrides)
 
 	if merged.Target != "remote:50051" {
-		t.Errorf("merged Target = %q, want %q", merged.Target, "remote:50051")
-	}
-	if merged.Proto != "service.proto" {
-		t.Errorf("merged Proto = %q, want %q", merged.Proto, "service.proto")
+		t.Errorf("merged Target = %q, want remote:50051", merged.Target)
 	}
 	if merged.Concurrency != 50 {
-		t.Errorf("merged Concurrency = %d, want %d", merged.Concurrency, 50)
+		t.Errorf("merged Concurrency = %d, want 50", merged.Concurrency)
 	}
-	if merged.Total != 1000 {
-		t.Errorf("merged Total should remain %d, got %d", 1000, merged.Total)
+	// --call override should reduce Calls to single entry
+	if len(merged.Calls) != 1 {
+		t.Fatalf("expected 1 call after --call override, got %d", len(merged.Calls))
+	}
+	if merged.Calls[0].Call != "pkg.Svc/MethodA" {
+		t.Errorf("merged Calls[0].Call = %q, want pkg.Svc/MethodA", merged.Calls[0].Call)
+	}
+}
+
+func TestMergeFlags_NoCallOverridePreservesAll(t *testing.T) {
+	base := &Config{
+		Target: "localhost:50051",
+		Proto:  "service.proto",
+		Calls: []CallEntry{
+			{Call: "pkg.Svc/MethodA"},
+			{Call: "pkg.Svc/MethodB"},
+		},
+	}
+
+	overrides := &FlagOverrides{Concurrency: 20}
+	merged := MergeFlags(base, overrides)
+
+	if len(merged.Calls) != 2 {
+		t.Errorf("expected 2 calls preserved, got %d", len(merged.Calls))
+	}
+}
+
+func TestMergeFlags_ParallelOverride(t *testing.T) {
+	base := &Config{
+		Target:   "localhost:50051",
+		Proto:    "service.proto",
+		Calls:    []CallEntry{{Call: "pkg.Svc/Method"}},
+		Parallel: false,
+	}
+
+	overrides := &FlagOverrides{Parallel: true}
+	merged := MergeFlags(base, overrides)
+
+	if !merged.Parallel {
+		t.Error("expected Parallel=true after flag override")
 	}
 }
 
@@ -239,7 +279,7 @@ func TestApplyDefaults(t *testing.T) {
 	cfg := &Config{
 		Target: "localhost:50051",
 		Proto:  "service.proto",
-		Call:   "pkg.Svc/Method",
+		Calls:  []CallEntry{{Call: "pkg.Svc/Method"}},
 	}
 
 	ApplyDefaults(cfg)

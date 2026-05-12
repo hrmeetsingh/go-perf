@@ -7,10 +7,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type exampleCallEntry struct {
+	Call string `yaml:"call"`
+}
+
 type exampleConfig struct {
-	Target string `yaml:"target"`
-	Proto  string `yaml:"proto"`
-	Call   string `yaml:"call"`
+	Target string             `yaml:"target"`
+	Proto  string             `yaml:"proto"`
+	Calls  []exampleCallEntry `yaml:"calls"`
 }
 
 func TestExampleConfigs_ParseCorrectly(t *testing.T) {
@@ -37,8 +41,13 @@ func TestExampleConfigs_ParseCorrectly(t *testing.T) {
 			if cfg.Proto == "" {
 				t.Errorf("%s: proto is empty", path)
 			}
-			if cfg.Call == "" {
-				t.Errorf("%s: call is empty", path)
+			if len(cfg.Calls) == 0 {
+				t.Errorf("%s: calls list is empty", path)
+			}
+			for i, ce := range cfg.Calls {
+				if ce.Call == "" {
+					t.Errorf("%s: calls[%d].call is empty", path, i)
+				}
 			}
 		})
 	}

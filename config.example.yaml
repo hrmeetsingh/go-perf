@@ -3,14 +3,16 @@
 
 target: "localhost:50051"
 proto: "path/to/service.proto"        # single file or directory
-call: "mypackage.MyService/DoWork"    # fully qualified method
 
-# Benchmark parameters
+# Benchmark parameters (shared across all calls)
 concurrency: 50
 total: 1000
 duration: "30s"                       # alternative to total
 connections: 5
 timeout: "10s"
+
+# Run all calls in parallel (default: false = sequential)
+parallel: false
 
 # Custom metadata sent with each request
 metadata:
@@ -26,26 +28,31 @@ auth:
   # client_id: "my-client-id"
   # client_secret: "my-client-secret"
 
-# Dynamic payload fields — these fields are randomized per request
-dynamic_fields:
-  - field: "user_id"
-    type: "uuid"
+# calls — list of RPC methods to benchmark from the same proto file.
+# Each call can have its own dynamic_fields for per-call payload variation.
+calls:
+  - call: "mypackage.MyService/DoWork"
+    dynamic_fields:
+      - field: "user_id"
+        type: "uuid"
 
-  - field: "amount"
-    type: "int_range"
-    min: 1
-    max: 10000
+      - field: "amount"
+        type: "int_range"
+        min: 1
+        max: 10000
 
-  - field: "status"
-    type: "pool"
-    values: ["active", "inactive", "pending"]
+      - field: "status"
+        type: "pool"
+        values: ["active", "inactive", "pending"]
 
-  - field: "name"
-    type: "string"
-    length: 12
+  - call: "mypackage.MyService/GetStatus"
+    dynamic_fields:
+      - field: "name"
+        type: "string"
+        length: 12
 
-  - field: "created_at"
-    type: "timestamp"
+      - field: "created_at"
+        type: "timestamp"
 
 # Output configuration
 output:

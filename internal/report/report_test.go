@@ -225,3 +225,70 @@ func TestMultiReporter_Write(t *testing.T) {
 		t.Error("JSON reporter produced no output")
 	}
 }
+
+// MultiCallBenchmarkData tests
+
+func sampleMultiCallData() *MultiCallBenchmarkData {
+	return &MultiCallBenchmarkData{
+		Timestamp: time.Date(2026, 5, 12, 8, 0, 0, 0, time.UTC),
+		Target:    "localhost:50051",
+		Calls: []BenchmarkData{
+			*sampleData(),
+			{
+				Timestamp:   time.Date(2026, 5, 12, 8, 0, 0, 0, time.UTC),
+				Target:      "localhost:50051",
+				Call:        "testpkg.Greeter/SayBye",
+				TotalCount:  500,
+				ErrorCount:  0,
+				Duration:    10 * time.Second,
+				Concurrency: 10,
+				AvgLatency:  5 * time.Millisecond,
+				RPS:         50.0,
+				StatusCodes: map[string]int{"OK": 500},
+			},
+		},
+	}
+}
+
+func TestCLIReporter_WriteMultiCall(t *testing.T) {
+	var buf bytes.Buffer
+	r := NewCLIReporter(&buf)
+
+	data := sampleMultiCallData()
+	if err := r.WriteMultiCall(data); err != nil {
+		t.Fatalf("WriteMultiCall() error = %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "SayHello") {
+		t.Error("expected first call name in output")
+	}
+	if !strings.Contains(output, "SayBye") {
+		t.Error("expected second call name in output")
+	}
+}
+
+func TestJSONReporter_WriteMultiCall(t *testing.T) {
+	var buf bytes.Buffer
+	r := NewJSONReporter(&buf)
+
+	data := sampleMultiCallData()
+	if err := r.WriteMultiCall(data); err != nil {
+		t.Fatalf("WriteMultiCall() error = %v", err)
+	}
+
+	var decoded MultiCallBenchmarkData
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("output is not valid JSON: %v", err)
+	}
+	if len(decoded.Calls) != 2 {
+		t.Errorf("decoded Calls count = %d, want 2", len(decoded.Calls))
+	}
+}
+
+func TestMultiCallBenchmarkData_CallCount(t *testing.T) {
+	data := sampleMultiCallData()
+	if len(data.Calls) != 2 {
+		t.Errorf("Calls count = %d, want 2", len(data.Calls))
+	}
+}

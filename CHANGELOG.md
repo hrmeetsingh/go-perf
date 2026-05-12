@@ -240,6 +240,68 @@ All 7 refactorings applied cleanly. The Engine interface decouples orchestrator 
 ### Summary
 The sample BenchService exposes 4 RPCs wired to a shared perf_sim package. TierMultiplier applies a 1×/2×/5× latency factor for premium/standard/free users. SpikeLatency randomly inflates 1-in-N requests by a configurable multiplier to produce realistic spike distributions visible in drill-down reports. PayloadLatency scales with request byte size. The Makefile provides one-command workflows from server start through report generation and comparison. All existing tests remain green.
 
+## v14 - Implementation (multi-call) - 2026-05-12T08:10
+
+### What changed
+- `internal/config`: Added `CallEntry`, `Config.Calls []CallEntry`, `Config.Parallel`; removed root `Call string` and root `DynamicFields`; updated `Validate`, `MergeFlags` (--call collapses to single entry, --parallel override), `ApplyDefaults`
+- `internal/storage`: Added `BenchmarkRun { ID, Timestamp, Calls []Benchmark }`, `SaveRun`, `LoadRun`
+- `internal/report`: Added `MultiCallBenchmarkData { Timestamp, Target, Calls []BenchmarkData }`; extended `Reporter` interface with `WriteMultiCall`; implemented across all 5 reporters; added JSON tags to `BenchmarkData`
+- `cmd/run.go`: Replaced single-call loop with multi-call `runOne`; added `--parallel` flag; sequential/parallel execution via `sync.WaitGroup`; reports via `WriteMultiCall`; saves via `SaveRun`
+- `examples/configs/*.yaml`: Migrated from `call:` + root `dynamic_fields:` to `calls:` list with per-call `dynamic_fields:`
+- `config.example.yaml`: Updated to new `calls:` schema with two example entries
+- `examples/configs_test.go`: Updated `exampleConfig` to use `calls:` list
+
+### Test count
+- 97 tests passing / 97 total (13 new)
+
+### Files touched
+- `internal/config/config.go`
+- `internal/config/config_test.go`
+- `internal/storage/storage.go`
+- `internal/storage/storage_test.go`
+- `internal/report/report.go`
+- `internal/report/report_test.go`
+- `cmd/run.go`
+- `examples/configs/quick.yaml`
+- `examples/configs/full.yaml`
+- `examples/configs/dynamic.yaml`
+- `examples/configs/stream.yaml`
+- `examples/configs_test.go`
+- `config.example.yaml`
+- `CHANGELOG.md`
+
+## v13 - Tests (multi-call) - 2026-05-12T08:05
+
+### What changed
+- Added failing tests for: `Config.Calls`, `CallEntry`, `Parallel`, `MergeFlags` with `--call` and `--parallel` overrides; `BenchmarkRun` `SaveRun`/`LoadRun`; `MultiCallBenchmarkData`; `WriteMultiCall` on CLI and JSON reporters
+- 13 new tests, all failing before implementation
+
+### Files touched
+- `internal/config/config_test.go`
+- `internal/storage/storage_test.go`
+- `internal/report/report_test.go`
+
+## v12 - Diagram (multi-call) - 2026-05-12T07:50
+
+### What changed
+- Presented architecture diagram for multi-call config support
+- Confirmed by user
+
+### Design decisions
+- `calls: []CallEntry` replaces root `call:` field
+- `CallEntry` has `call:` + `call-scoped dynamic_fields:`
+- Root `concurrency/total/duration` shared across all calls
+- `parallel: false` default, configurable in config + `--parallel` CLI flag
+- `--call` flag wraps into single-element list (override)
+- Per-call sections in reports; one JSON file per run containing all calls
+- `BenchmarkRun { ID, Calls []Benchmark }` in storage
+
+### Files touched
+- `CHANGELOG.md`
+
+### Test status
+- 84 tests passing / 84 total
+
 ## v8 - Clarify (examples) - 2026-05-10T15:22
 
 ### What changed

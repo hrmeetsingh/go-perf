@@ -2,23 +2,22 @@
 # Demonstrates bidi stream support with configurable send rate.
 target: "localhost:50051"
 proto: "examples/bench.proto"
-call: "bench.BenchService/BidirectionalChat"
 
 concurrency: 5
 duration: "30s"
 timeout: "35s"
 
-dynamic_fields:
-  - field: "user_tier"
-    type: "pool"
-    values: ["premium", "standard", "free"]
-
-  - field: "text"
-    type: "string"
-    length: 16
-
-  - field: "sender"
-    type: "uuid"
+calls:
+  - call: "bench.BenchService/BidirectionalChat"
+    dynamic_fields:
+      - field: "user_tier"
+        type: "pool"
+        values: ["premium", "standard", "free"]
+      - field: "text"
+        type: "string"
+        length: 16
+      - field: "sender"
+        type: "uuid"
 
 stream:
   send_rate: 50

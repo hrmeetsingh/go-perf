@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/hrmeetsingh/go-perf/internal/auth"
@@ -38,12 +39,13 @@ var (
 	flagFormats     []string
 	flagSave        bool
 	flagStoreDir    string
+	flagParallel    bool
 )
 
 func init() {
 	runCmd.Flags().StringVar(&flagTarget, "target", "", "gRPC server target (host:port)")
 	runCmd.Flags().StringVar(&flagProto, "proto", "", "path to proto file or directory")
-	runCmd.Flags().StringVar(&flagCall, "call", "", "fully qualified method (pkg.Service/Method)")
+	runCmd.Flags().StringVar(&flagCall, "call", "", "fully qualified method (pkg.Service/Method); overrides calls list to a single entry")
 	runCmd.Flags().IntVar(&flagConcurrency, "concurrency", 0, "number of concurrent workers")
 	runCmd.Flags().IntVar(&flagTotal, "total", 0, "total number of requests")
 	runCmd.Flags().StringVar(&flagDuration, "duration", "", "benchmark duration (e.g. 30s)")
@@ -55,8 +57,17 @@ func init() {
 	runCmd.Flags().StringSliceVar(&flagFormats, "format", nil, "output formats: cli,html,json,junit")
 	runCmd.Flags().BoolVar(&flagSave, "save", false, "save benchmark results for later comparison")
 	runCmd.Flags().StringVar(&flagStoreDir, "store-dir", ".go-perf/benchmarks", "directory for stored benchmarks")
+	runCmd.Flags().BoolVar(&flagParallel, "parallel", false, "run multiple calls in parallel")
 
 	rootCmd.AddCommand(runCmd)
+}
+
+// callResult pairs a CallEntry with its benchmark result.
+type callResult struct {
+	entry config.CallEntry
+	data  *report.BenchmarkData
+	bench storage.Benchmark
+	err   error
 }
 
 func runBenchmark(cmd *cobra.Command, args []string) error {
@@ -88,46 +99,85 @@ func runBenchmark(cmd *cobra.Command, args []string) error {
 	dur, _ := time.ParseDuration(cfg.Duration)
 	timeout, _ := time.ParseDuration(cfg.Timeout)
 
-	runCfg := runner.RunConfig{
-		Target:      cfg.Target,
-		Call:        cfg.Call,
-		ProtoPath:   protoFiles[0],
-		Concurrency: cfg.Concurrency,
-		Total:       cfg.Total,
-		Duration:    dur,
-		Connections: cfg.Connections,
-		Timeout:     timeout,
-		Metadata:    cfg.Metadata,
-		Insecure:    flagInsecure,
+	runOne := func(entry config.CallEntry) callResult {
+		variants, err := buildVariantsFromEntry(entry)
+		if err != nil {
+			return callResult{entry: entry, err: fmt.Errorf("building variants for %q: %w", entry.Call, err)}
+		}
+
+		runCfg := runner.RunConfig{
+			Target:      cfg.Target,
+			Call:        entry.Call,
+			ProtoPath:   protoFiles[0],
+			Concurrency: cfg.Concurrency,
+			Total:       cfg.Total,
+			Duration:    dur,
+			Connections: cfg.Connections,
+			Timeout:     timeout,
+			Metadata:    cfg.Metadata,
+			Insecure:    flagInsecure,
+		}
+
+		orchCfg := runner.OrchestratorConfig{
+			RunConfig: runCfg,
+			Variants:  variants,
+		}
+
+		engine := runner.NewGhzEngine()
+		orch := runner.NewOrchestrator(orchCfg, authMeta, engine)
+		multiResult, err := orch.Run(ctx)
+		if err != nil {
+			return callResult{entry: entry, err: fmt.Errorf("benchmark %q failed: %w", entry.Call, err)}
+		}
+
+		merged := multiResult.Merge()
+		stats := merged.LatencyStats()
+		benchData := buildBenchmarkData(entry.Call, cfg, merged, stats)
+		bench := buildBenchmark(entry.Call, cfg, stats, merged)
+		return callResult{entry: entry, data: benchData, bench: bench}
 	}
 
-	variants, err := buildVariants(cfg)
-	if err != nil {
-		return fmt.Errorf("building variants: %w", err)
+	results := make([]callResult, len(cfg.Calls))
+
+	if cfg.Parallel {
+		var wg sync.WaitGroup
+		for i, entry := range cfg.Calls {
+			wg.Add(1)
+			go func(idx int, e config.CallEntry) {
+				defer wg.Done()
+				results[idx] = runOne(e)
+			}(i, entry)
+		}
+		wg.Wait()
+	} else {
+		for i, entry := range cfg.Calls {
+			results[i] = runOne(entry)
+		}
 	}
 
-	orchCfg := runner.OrchestratorConfig{
-		RunConfig: runCfg,
-		Variants:  variants,
+	// Collect per-call benchmark data; surface first error if any.
+	multiData := &report.MultiCallBenchmarkData{
+		Timestamp: time.Now(),
+		Target:    cfg.Target,
+	}
+	var benchRun storage.BenchmarkRun
+	benchRun.ID = fmt.Sprintf("run_%s", time.Now().Format("20060102T150405"))
+	benchRun.Timestamp = time.Now()
+
+	for _, res := range results {
+		if res.err != nil {
+			return res.err
+		}
+		multiData.Calls = append(multiData.Calls, *res.data)
+		benchRun.Calls = append(benchRun.Calls, res.bench)
 	}
 
-	engine := runner.NewGhzEngine()
-	orch := runner.NewOrchestrator(orchCfg, authMeta, engine)
-	multiResult, err := orch.Run(ctx)
-	if err != nil {
-		return fmt.Errorf("benchmark run failed: %w", err)
-	}
-
-	merged := multiResult.Merge()
-	stats := merged.LatencyStats()
-	benchData := buildBenchmarkData(cfg, merged, stats)
-
-	if err := writeReports(ctx, cfg, benchData); err != nil {
+	if err := writeMultiCallReports(ctx, cfg, multiData); err != nil {
 		return fmt.Errorf("writing reports: %w", err)
 	}
 
 	if flagSave {
-		if err := saveBenchmark(ctx, cfg, stats, merged); err != nil {
+		if err := saveRun(ctx, &benchRun); err != nil {
 			return fmt.Errorf("saving benchmark: %w", err)
 		}
 	}
@@ -188,6 +238,7 @@ func loadConfig() (*config.Config, error) {
 		Duration:    flagDuration,
 		Connections: flagConnections,
 		Timeout:     flagTimeout,
+		Parallel:    flagParallel,
 	}
 
 	cfg = config.MergeFlags(cfg, overrides)
@@ -207,15 +258,15 @@ func loadConfig() (*config.Config, error) {
 	return cfg, nil
 }
 
-func buildVariants(cfg *config.Config) ([]runner.VariantConfig, error) {
-	if len(cfg.DynamicFields) == 0 {
+func buildVariantsFromEntry(entry config.CallEntry) ([]runner.VariantConfig, error) {
+	if len(entry.DynamicFields) == 0 {
 		return []runner.VariantConfig{
 			runner.NewVariantConfig("default", map[string]interface{}{}),
 		}, nil
 	}
 
 	providers := make(map[string]payload.DynamicProvider)
-	for _, df := range cfg.DynamicFields {
+	for _, df := range entry.DynamicFields {
 		p, err := payload.NewProviderFromConfig(payload.ProviderConfig{
 			Type:   df.Type,
 			Min:    df.Min,
@@ -237,11 +288,11 @@ func buildVariants(cfg *config.Config) ([]runner.VariantConfig, error) {
 	}, nil
 }
 
-func buildBenchmarkData(cfg *config.Config, result *runner.Result, stats runner.LatencyStats) *report.BenchmarkData {
+func buildBenchmarkData(call string, cfg *config.Config, result *runner.Result, stats runner.LatencyStats) *report.BenchmarkData {
 	data := &report.BenchmarkData{
 		Timestamp:   time.Now(),
 		Target:      cfg.Target,
-		Call:        cfg.Call,
+		Call:        call,
 		TotalCount:  result.TotalCount,
 		ErrorCount:  result.ErrorCount,
 		Duration:    result.Duration,
@@ -271,22 +322,12 @@ func buildBenchmarkData(cfg *config.Config, result *runner.Result, stats runner.
 	return data
 }
 
-func writeReports(_ context.Context, cfg *config.Config, data *report.BenchmarkData) error {
-	reporters, err := report.ReportersFromFormats(cfg.Output.Formats, cfg.Output.Dir)
-	if err != nil {
-		return err
-	}
-	multi := report.NewMultiReporter(reporters...)
-	return multi.Write(data)
-}
-
-func saveBenchmark(_ context.Context, cfg *config.Config, stats runner.LatencyStats, result *runner.Result) error {
-	store := storage.NewJSONStore(flagStoreDir)
-	b := &storage.Benchmark{
-		ID:          fmt.Sprintf("%s_%s", cfg.Call, time.Now().Format("20060102T150405")),
+func buildBenchmark(call string, cfg *config.Config, stats runner.LatencyStats, result *runner.Result) storage.Benchmark {
+	return storage.Benchmark{
+		ID:          fmt.Sprintf("%s_%s", call, time.Now().Format("20060102T150405")),
 		Timestamp:   time.Now(),
 		Target:      cfg.Target,
-		Call:        cfg.Call,
+		Call:        call,
 		TotalCount:  result.TotalCount,
 		ErrorCount:  result.ErrorCount,
 		Duration:    result.Duration,
@@ -299,11 +340,23 @@ func saveBenchmark(_ context.Context, cfg *config.Config, stats runner.LatencySt
 		P99Latency:  stats.P99,
 		RPS:         result.RPS,
 	}
+}
 
-	path, err := store.Save(b)
+func writeMultiCallReports(_ context.Context, cfg *config.Config, data *report.MultiCallBenchmarkData) error {
+	reporters, err := report.ReportersFromFormats(cfg.Output.Formats, cfg.Output.Dir)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "Benchmark saved: %s\n", path)
+	multi := report.NewMultiReporter(reporters...)
+	return multi.WriteMultiCall(data)
+}
+
+func saveRun(_ context.Context, run *storage.BenchmarkRun) error {
+	store := storage.NewJSONStore(flagStoreDir)
+	path, err := store.SaveRun(run)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "Benchmark run saved: %s\n", path)
 	return nil
 }

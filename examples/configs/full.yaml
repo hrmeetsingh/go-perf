@@ -1,28 +1,36 @@
 # Full benchmark — 2000 requests, all output formats.
-# Uses ProcessOrder to demonstrate payload-driven latency.
-# Dynamic fields generate varied payloads so the drill-down report shows
-# how different user tiers and amounts correlate with observed latency.
+# Two calls from the same proto: ProcessOrder (payload-driven latency) and
+# FastEcho (baseline), run sequentially. Per-call dynamic_fields allow the
+# drill-down report to show how tiers and amounts affect latency per method.
 target: "localhost:50051"
 proto: "examples/bench.proto"
-call: "bench.BenchService/ProcessOrder"
 
 concurrency: 20
 total: 2000
 timeout: "10s"
 connections: 2
 
-dynamic_fields:
-  - field: "user_tier"
-    type: "pool"
-    values: ["premium", "standard", "free"]
+calls:
+  - call: "bench.BenchService/ProcessOrder"
+    dynamic_fields:
+      - field: "user_tier"
+        type: "pool"
+        values: ["premium", "standard", "free"]
+      - field: "order_id"
+        type: "uuid"
+      - field: "amount"
+        type: "int_range"
+        min: 1
+        max: 5000
 
-  - field: "order_id"
-    type: "uuid"
-
-  - field: "amount"
-    type: "int_range"
-    min: 1
-    max: 5000
+  - call: "bench.BenchService/FastEcho"
+    dynamic_fields:
+      - field: "user_tier"
+        type: "pool"
+        values: ["premium", "standard", "free"]
+      - field: "message"
+        type: "string"
+        length: 16
 
 output:
   formats: ["cli", "html", "json", "junit"]

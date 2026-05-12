@@ -13,25 +13,34 @@ import (
 
 type Reporter interface {
 	Write(data *BenchmarkData) error
+	WriteMultiCall(data *MultiCallBenchmarkData) error
+}
+
+// MultiCallBenchmarkData holds the aggregated results for a run that exercised
+// multiple RPC calls (possibly in parallel).
+type MultiCallBenchmarkData struct {
+	Timestamp time.Time       `json:"timestamp"`
+	Target    string          `json:"target"`
+	Calls     []BenchmarkData `json:"calls"`
 }
 
 type BenchmarkData struct {
-	Timestamp     time.Time
-	Target        string
-	Call          string
-	TotalCount    int
-	ErrorCount    int
-	Duration      time.Duration
-	Concurrency   int
-	AvgLatency    time.Duration
-	MinLatency    time.Duration
-	MaxLatency    time.Duration
-	P50Latency    time.Duration
-	P95Latency    time.Duration
-	P99Latency    time.Duration
-	RPS           float64
-	StatusCodes   map[string]int
-	PayloadGroups []PayloadGroupData
+	Timestamp     time.Time          `json:"timestamp"`
+	Target        string             `json:"target"`
+	Call          string             `json:"call"`
+	TotalCount    int                `json:"total_count"`
+	ErrorCount    int                `json:"error_count"`
+	Duration      time.Duration      `json:"duration_ns"`
+	Concurrency   int                `json:"concurrency"`
+	AvgLatency    time.Duration      `json:"avg_latency_ns"`
+	MinLatency    time.Duration      `json:"min_latency_ns"`
+	MaxLatency    time.Duration      `json:"max_latency_ns"`
+	P50Latency    time.Duration      `json:"p50_latency_ns"`
+	P95Latency    time.Duration      `json:"p95_latency_ns"`
+	P99Latency    time.Duration      `json:"p99_latency_ns"`
+	RPS           float64            `json:"rps"`
+	StatusCodes   map[string]int     `json:"status_codes"`
+	PayloadGroups []PayloadGroupData `json:"payload_groups,omitempty"`
 }
 
 type PayloadGroupData struct {
@@ -102,6 +111,21 @@ func (r *cliReporter) Write(data *BenchmarkData) error {
 		fmt.Fprintf(r.w, "\n")
 	}
 
+	return nil
+}
+
+func (r *cliReporter) WriteMultiCall(data *MultiCallBenchmarkData) error {
+	if data == nil {
+		return fmt.Errorf("multi-call benchmark data is nil")
+	}
+	fmt.Fprintf(r.w, "\n%s\n", strings.Repeat("=", 60))
+	fmt.Fprintf(r.w, "  Multi-Call gRPC Benchmark Report — %s\n", data.Target)
+	fmt.Fprintf(r.w, "%s\n", strings.Repeat("=", 60))
+	for i := range data.Calls {
+		if err := r.Write(&data.Calls[i]); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -189,6 +213,15 @@ func (r *jsonReporter) Write(data *BenchmarkData) error {
 	return enc.Encode(out)
 }
 
+func (r *jsonReporter) WriteMultiCall(data *MultiCallBenchmarkData) error {
+	if data == nil {
+		return fmt.Errorf("multi-call benchmark data is nil")
+	}
+	enc := json.NewEncoder(r.w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(data)
+}
+
 func msFromDuration(d time.Duration) float64 {
 	return float64(d.Microseconds()) / 1000.0
 }
@@ -216,6 +249,18 @@ func (r *htmlReporter) Write(data *BenchmarkData) error {
 	defer f.Close()
 
 	return r.tmpl.Execute(f, data)
+}
+
+func (r *htmlReporter) WriteMultiCall(data *MultiCallBenchmarkData) error {
+	if data == nil {
+		return fmt.Errorf("multi-call benchmark data is nil")
+	}
+	for i := range data.Calls {
+		if err := r.Write(&data.Calls[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func defaultTemplate() *template.Template {
@@ -330,6 +375,18 @@ func (r *junitReporter) Write(data *BenchmarkData) error {
 	return err
 }
 
+func (r *junitReporter) WriteMultiCall(data *MultiCallBenchmarkData) error {
+	if data == nil {
+		return fmt.Errorf("multi-call benchmark data is nil")
+	}
+	for i := range data.Calls {
+		if err := r.Write(&data.Calls[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // --- Multi Reporter ---
 
 type multiReporter struct {
@@ -343,6 +400,15 @@ func NewMultiReporter(reporters ...Reporter) Reporter {
 func (r *multiReporter) Write(data *BenchmarkData) error {
 	for _, reporter := range r.reporters {
 		if err := reporter.Write(data); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *multiReporter) WriteMultiCall(data *MultiCallBenchmarkData) error {
+	for _, reporter := range r.reporters {
+		if err := reporter.WriteMultiCall(data); err != nil {
 			return err
 		}
 	}

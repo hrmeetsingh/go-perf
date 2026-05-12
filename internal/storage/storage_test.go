@@ -224,3 +224,75 @@ func TestJSONStore_FilenameContainsTimestamp(t *testing.T) {
 		t.Errorf("filename %q seems too short to contain timestamp", filename)
 	}
 }
+
+// BenchmarkRun (multi-call) tests
+
+func sampleRun(id string, callCount int) *BenchmarkRun {
+	calls := make([]Benchmark, callCount)
+	for i := 0; i < callCount; i++ {
+		calls[i] = *sampleBenchmark("run-" + id)
+	}
+	return &BenchmarkRun{
+		ID:        id,
+		Timestamp: time.Date(2026, 5, 12, 8, 0, 0, 0, time.UTC),
+		Calls:     calls,
+	}
+}
+
+func TestJSONStore_SaveRun(t *testing.T) {
+	dir := t.TempDir()
+	store := NewJSONStore(dir)
+
+	run := sampleRun("multi-1", 2)
+	path, err := store.SaveRun(run)
+	if err != nil {
+		t.Fatalf("SaveRun() error = %v", err)
+	}
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		t.Errorf("saved run file does not exist: %s", path)
+	}
+}
+
+func TestJSONStore_LoadRun(t *testing.T) {
+	dir := t.TempDir()
+	store := NewJSONStore(dir)
+
+	original := sampleRun("multi-1", 3)
+	path, err := store.SaveRun(original)
+	if err != nil {
+		t.Fatalf("SaveRun() error = %v", err)
+	}
+
+	loaded, err := store.LoadRun(path)
+	if err != nil {
+		t.Fatalf("LoadRun() error = %v", err)
+	}
+
+	if loaded.ID != original.ID {
+		t.Errorf("ID = %q, want %q", loaded.ID, original.ID)
+	}
+	if len(loaded.Calls) != 3 {
+		t.Errorf("Calls count = %d, want 3", len(loaded.Calls))
+	}
+}
+
+func TestJSONStore_LoadRun_NotFound(t *testing.T) {
+	dir := t.TempDir()
+	store := NewJSONStore(dir)
+
+	_, err := store.LoadRun(filepath.Join(dir, "nonexistent.json"))
+	if err == nil {
+		t.Error("expected error for nonexistent file")
+	}
+}
+
+func TestBenchmarkRun_SaveRun_CreatesDirectory(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "nested", "runs")
+	store := NewJSONStore(dir)
+
+	run := sampleRun("multi-2", 1)
+	_, err := store.SaveRun(run)
+	if err != nil {
+		t.Fatalf("SaveRun() error = %v", err)
+	}
+}

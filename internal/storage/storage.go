@@ -9,6 +9,14 @@ import (
 	"time"
 )
 
+// BenchmarkRun holds the results from a single execution of go-perf, which may
+// include multiple RPC calls run sequentially or in parallel.
+type BenchmarkRun struct {
+	ID        string      `json:"id"`
+	Timestamp time.Time   `json:"timestamp"`
+	Calls     []Benchmark `json:"calls"`
+}
+
 type Benchmark struct {
 	ID          string        `json:"id"`
 	Timestamp   time.Time     `json:"timestamp"`
@@ -48,6 +56,44 @@ type JSONStore struct {
 
 func NewJSONStore(dir string) *JSONStore {
 	return &JSONStore{dir: dir}
+}
+
+// SaveRun persists a multi-call BenchmarkRun as a single JSON file.
+func (s *JSONStore) SaveRun(run *BenchmarkRun) (string, error) {
+	if err := os.MkdirAll(s.dir, 0755); err != nil {
+		return "", fmt.Errorf("creating storage directory: %w", err)
+	}
+
+	ts := run.Timestamp.Format("20060102T150405")
+	safeID := strings.ReplaceAll(run.ID, "/", "_")
+	filename := fmt.Sprintf("run_%s_%s.json", ts, safeID)
+	path := filepath.Join(s.dir, filename)
+
+	data, err := json.MarshalIndent(run, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("marshaling benchmark run: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return "", fmt.Errorf("writing benchmark run file: %w", err)
+	}
+
+	return path, nil
+}
+
+// LoadRun reads a BenchmarkRun from a JSON file.
+func (s *JSONStore) LoadRun(path string) (*BenchmarkRun, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading benchmark run file: %w", err)
+	}
+
+	var run BenchmarkRun
+	if err := json.Unmarshal(data, &run); err != nil {
+		return nil, fmt.Errorf("parsing benchmark run: %w", err)
+	}
+
+	return &run, nil
 }
 
 func (s *JSONStore) Save(b *Benchmark) (string, error) {

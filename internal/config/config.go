@@ -8,19 +8,26 @@ import (
 )
 
 type Config struct {
-	Target        string              `yaml:"target"`
-	Proto         string              `yaml:"proto"`
-	Call          string              `yaml:"call"`
-	Concurrency   int                 `yaml:"concurrency"`
-	Total         int                 `yaml:"total"`
-	Duration      string              `yaml:"duration"`
-	Connections   int                 `yaml:"connections"`
-	Timeout       string              `yaml:"timeout"`
-	Metadata      map[string]string   `yaml:"metadata"`
-	Auth          AuthConfig          `yaml:"auth"`
+	Target      string            `yaml:"target"`
+	Proto       string            `yaml:"proto"`
+	Concurrency int               `yaml:"concurrency"`
+	Total       int               `yaml:"total"`
+	Duration    string            `yaml:"duration"`
+	Connections int               `yaml:"connections"`
+	Timeout     string            `yaml:"timeout"`
+	Metadata    map[string]string `yaml:"metadata"`
+	Auth        AuthConfig        `yaml:"auth"`
+	Output      OutputConfig      `yaml:"output"`
+	Stream      StreamConfig      `yaml:"stream"`
+	Parallel    bool              `yaml:"parallel"`
+	// Calls is the list of RPC calls to benchmark, each with its own dynamic_fields.
+	Calls []CallEntry `yaml:"calls"`
+}
+
+// CallEntry represents a single RPC call within a multi-call config.
+type CallEntry struct {
+	Call          string               `yaml:"call"`
 	DynamicFields []DynamicFieldConfig `yaml:"dynamic_fields"`
-	Output        OutputConfig        `yaml:"output"`
-	Stream        StreamConfig        `yaml:"stream"`
 }
 
 type AuthConfig struct {
@@ -53,12 +60,14 @@ type StreamConfig struct {
 type FlagOverrides struct {
 	Target      string
 	Proto       string
+	// Call, when set, collapses Calls to a single-entry list.
 	Call        string
 	Concurrency int
 	Total       int
 	Duration    string
 	Connections int
 	Timeout     string
+	Parallel    bool
 }
 
 var validAuthTypes = map[string]bool{
@@ -96,8 +105,18 @@ func (c *Config) Validate() error {
 	if c.Proto == "" {
 		return fmt.Errorf("proto is required")
 	}
-	if c.Call == "" {
-		return fmt.Errorf("call is required")
+	if len(c.Calls) == 0 {
+		return fmt.Errorf("at least one call entry is required under 'calls:'")
+	}
+	for i, ce := range c.Calls {
+		if ce.Call == "" {
+			return fmt.Errorf("calls[%d]: call name is required", i)
+		}
+		for j, df := range ce.DynamicFields {
+			if !validDynamicFieldTypes[df.Type] {
+				return fmt.Errorf("calls[%d].dynamic_fields[%d]: invalid type %q", i, j, df.Type)
+			}
+		}
 	}
 	if !validAuthTypes[c.Auth.Type] {
 		return fmt.Errorf("invalid auth type %q: must be static, oauth, or empty", c.Auth.Type)
@@ -105,24 +124,24 @@ func (c *Config) Validate() error {
 	if c.Auth.Type == "oauth" && c.Auth.TokenURL == "" {
 		return fmt.Errorf("auth.token_url is required when auth type is oauth")
 	}
-	for i, df := range c.DynamicFields {
-		if !validDynamicFieldTypes[df.Type] {
-			return fmt.Errorf("dynamic_fields[%d]: invalid type %q", i, df.Type)
-		}
-	}
 	return nil
 }
 
 func MergeFlags(base *Config, overrides *FlagOverrides) *Config {
 	merged := *base
+	// Deep copy Calls slice so we don't mutate base.
+	merged.Calls = make([]CallEntry, len(base.Calls))
+	copy(merged.Calls, base.Calls)
+
 	if overrides.Target != "" {
 		merged.Target = overrides.Target
 	}
 	if overrides.Proto != "" {
 		merged.Proto = overrides.Proto
 	}
+	// --call flag overrides Calls to a single-entry list.
 	if overrides.Call != "" {
-		merged.Call = overrides.Call
+		merged.Calls = []CallEntry{{Call: overrides.Call}}
 	}
 	if overrides.Concurrency != 0 {
 		merged.Concurrency = overrides.Concurrency
@@ -138,6 +157,9 @@ func MergeFlags(base *Config, overrides *FlagOverrides) *Config {
 	}
 	if overrides.Timeout != "" {
 		merged.Timeout = overrides.Timeout
+	}
+	if overrides.Parallel {
+		merged.Parallel = true
 	}
 	return &merged
 }
