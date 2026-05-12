@@ -1,18 +1,18 @@
 {
-  "timestamp": "2026-05-10T15:45:12-06:00",
+  "timestamp": "2026-05-12T06:56:38-06:00",
   "target": "localhost:50051",
   "call": "bench.BenchService/FastEcho",
   "total_count": 600,
   "error_count": 0,
-  "duration_ms": 189,
+  "duration_ms": 363,
   "concurrency": 15,
-  "avg_latency_ms": 4.286,
-  "min_latency_ms": 2.114,
-  "max_latency_ms": 23.225,
-  "p50_latency_ms": 2.405,
-  "p95_latency_ms": 20.336,
-  "p99_latency_ms": 20.538,
-  "rps": 3168.8815828563506,
+  "avg_latency_ms": 8.461,
+  "min_latency_ms": 4.147,
+  "max_latency_ms": 41.539,
+  "p50_latency_ms": 4.722,
+  "p95_latency_ms": 40.631,
+  "p99_latency_ms": 41.258,
+  "rps": 1650.199431964501,
   "status_codes": {
     "OK": 600
   },
@@ -21,9 +21,9 @@
       "hash": "dynamic",
       "sample_payload": null,
       "count": 600,
-      "avg_latency_ms": 4.286,
-      "max_latency_ms": 23.225,
-      "p99_latency_ms": 20.538
+      "avg_latency_ms": 8.461,
+      "max_latency_ms": 41.539,
+      "p99_latency_ms": 41.258
     }
   ]
 }
